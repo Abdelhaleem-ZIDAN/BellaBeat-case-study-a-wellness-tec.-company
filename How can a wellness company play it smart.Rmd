@@ -1,0 +1,333 @@
+---
+title: "How can a wellness company play it smart?"
+author: "Abdelhaleem ZIDAN"
+date: "2022-09-13"
+output:
+  html_document: default
+---
+
+### Bussiness Task
+
+Is to analyze smart wearable device usage patterns and trends in order to gain 
+some insights to analyse and improve **BellaBeat** products performance. which 
+can improve our services and products from the technical prespictive and from 
+the marketing prespective.
+
+### Discription of the data source
+
+The data source used for our case study is FitBit Fitness Tracker Data. This 
+dataset is stored in Kaggle and was made available through Mobius. the data source 
+is reliable but the data is 2 years old and collected over 31 days only which 
+is forcing some limitations to our analysis and outcomes should be used carefully.
+
+Primary data exploration was done using excel, and the data consists of mainly 
+5 categories:
+
+* daily calories 
+
+* daily steps
+
+* daily intensities -   *the 3 of them are already merged in one dataset* **dailyActivity_merged** with total of 33 participants
+
+* heart rate -   *data for only 7 participants it will be insufficient to use* 
+
+* weight log info. -   *data for only 8 participants it will be insufficient to use*
+
+* Sleep per day. -   *24 participants*
+
+>the rest of the csvs are for the same categories above but with more granular information (per hour and per minute), we will be focusing mainly on daily data for our analysis. from the granulated data we will focus only on the following:
+
+* hourly calories
+
+* hourly steps
+
+### transforming and cleaning
+
+I chose to use R because I need to document and share the whole process on my portofolio and because excel cannot handle very large datasets. and for my personal interest because i need to practice more R as it will be my first complete project to execute with R.
+
+#### installing and importing packages
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE, results= 'hide'}
+install.packages("tidyverse",repos = "http://cran.us.r-project.org")
+install.packages("ggplot2",repos = "http://cran.us.r-project.org")
+install.packages("skimr",repos = "http://cran.us.r-project.org")
+install.packages("janitor",repos = "http://cran.us.r-project.org")
+```
+```{r message=FALSE, warning=FALSE, paged.print=FALSE, results= 'hide'}
+library(tidyverse)
+library(ggplot2)
+library(skimr)
+library(janitor)
+library(lubridate)
+library(dplyr)
+```
+#### importing data
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE, results= 'hide'}
+daily_activity <- read_csv("~/Documents/work/Data Analysis/202209_Capstone project for Google certificate/202209_Case-study_BellaBeats_Google/2022_case-study_google-certificate_BellaBeat/dailyActivity_merged.csv")
+sleep_day <- read_csv("~/Documents/work/Data Analysis/202209_Capstone project for Google certificate/202209_Case-study_BellaBeats_Google/2022_case-study_google-certificate_BellaBeat/sleepDay_merged.csv")
+hourly_calories <- read_csv("~/Documents/work/Data Analysis/202209_Capstone project for Google certificate/202209_Case-study_BellaBeats_Google/2022_case-study_google-certificate_BellaBeat/hourlyCalories_merged.csv")
+hourly_steps <- read_csv("~/Documents/work/Data Analysis/202209_Capstone project for Google certificate/202209_Case-study_BellaBeats_Google/2022_case-study_google-certificate_BellaBeat/hourlySteps_merged.csv")
+```
+
+#### verifying correct importation of data and getting more insights on it
+
+we can use different functions to explore our data like (skim, str, head, view, ...etc)
+
+
+```{r}
+summary(daily_activity)
+```
+
+
+
+
+```{r}
+summary(sleep_day)
+```
+
+
+
+```{r}
+skim(hourly_calories)
+```
+
+
+
+
+```{r}
+skim(hourly_steps)
+```
+
+
+```{r}
+n_unique(daily_activity$Id)
+n_unique(sleep_day$Id)
+n_unique(hourly_calories$Id)
+n_unique(hourly_steps$Id)
+```
+
+
+
+>**The above exploration confirmed our initial findings from excel, we have a time frame of 31 days, participants for sleep data are ony 24 and for other data are 33 so we will need to be careful if we are merging those 2 datasets not to lose the unmatched ids from the daily activity data. no null values observed in the datasets.**
+**It also shows the average sleep min 419 (6.9 hours), and the average very active min is 21 which can be improved**
+
+
+
+#### Cleaning and Transforming
+
+We need to clean and transform the dates datasets as some are in datetime and all need to be standardized.
+
+```{r}
+daily_activity$ActivityDate <- mdy(daily_activity$ActivityDate)
+```
+```{r}
+sleep_day$SleepDay <- mdy_hms(sleep_day$SleepDay)
+```
+```{r}
+hourly_calories$ActivityHour <- mdy_hms(hourly_calories$ActivityHour)
+```
+```{r}
+hourly_steps$ActivityHour <- mdy_hms(hourly_steps$ActivityHour)
+```
+
+next we are going to clean column names
+
+```{r}
+daily_activity_c <- daily_activity %>% 
+  clean_names() 
+sleep_day_c <- sleep_day %>% 
+  clean_names() %>% 
+  rename(date = sleep_day)
+hourly_calories_c <- hourly_calories %>% 
+  clean_names()
+hourly_steps_c <- hourly_steps %>% 
+  clean_names()
+```
+
+
+
+#### Analysis & Visualization
+
+first we will merge our datasets to link some data together to be able to do more analysis and vis.
+
+
+
+##### Here will perform our first merge & separate date from time for the **hourly data**
+```{r}
+hourly_calories_steps <- 
+  merge(hourly_calories_c, hourly_steps_c) 
+hourly_calories_steps$date <- as.Date(hourly_calories_steps$activity_hour)
+hourly_calories_steps$time <- 
+  format(as.POSIXct(hourly_calories_steps$activity_hour),format =  "%H:%M:%S")
+```
+Creating a column to categorize the time (morning, afternoon,evening, night)
+
+```{r}
+hourly_calories_steps <- hourly_calories_steps %>% 
+  mutate(part_of_day = case_when(
+    time >  "05:00:00" & time <= "12:00:00"  ~ "Morning 5 to 12",
+    time >  "12:00:00" & time <= "17:00:00"  ~ "Afternoon 12 to 17",
+    time >  "17:00:00" & time <= "21:00:00"  ~ "Evening 17 to 21",
+    TRUE ~ "night 21 to 5"))
+```
+
+
+
+```{r}
+ggplot(hourly_calories_steps, aes(x = step_total, y = calories)) +
+  geom_jitter(aes(color = part_of_day)) + 
+  geom_smooth() +
+  facet_wrap(~part_of_day)
+  labs(title = "Total steps VS calories")
+```
+
+> as expected there is a positive coorelation between the number of steps and the calories burnt. 🥵 
+
+
+
+
+plotting calories burnt over the day by all participants
+```{r}
+ggplot(hourly_calories_steps, aes(x = time, y = calories, fill = part_of_day)) +
+  geom_col()+
+  labs(title = "Collective calories burnt over the day") +
+  theme(axis.text.x = element_text(angle = 45))
+```
+
+> As expected the least calories was burnt during the night
+
+
+
+
+##### Next merging **daily data**
+```{r}
+daily_activity_sleep <- 
+  merge(daily_activity_c, sleep_day_c, 
+        by.x = c("id","activity_date"), by.y = c("id","date"),
+        all.x = TRUE, all.y = TRUE)
+```
+```{r}
+skim(daily_activity_sleep)
+```
+
+**note that we have 530 unmatched values from the missing data in the sleep_day dataset**
+
+#### Grouping by ID to determine average distance covered vs average sedentary minutes vs calories
+
+```{r}
+grouped_d_a <- daily_activity_sleep %>% 
+  group_by(id) %>% 
+  summarise(average_very_active_m = mean(very_active_minutes), average_distance = mean(total_distance), average_sedentary = mean(sedentary_minutes), average_calories = mean(calories))
+```
+
+```{r}
+summary(grouped_d_a)
+```
+
+
+#### Categorizing by activity level assuming that:
+**high activity** are people who have average distance and average very active minutes **more** than the total average and sedentary minutes **less** than the total average sedentary time. 
+
+**low active** are people who have average distance and average very active minutes **less** than the total average and sedentary minutes **more** than the total. average sedentary time. 
+
+**moderately active** are people who doesn't fall in either of the previous groups.
+
+```{r}
+grouped_d_a <- grouped_d_a %>% 
+  mutate(activity_level = 
+           case_when(
+             average_very_active_m > mean(average_very_active_m) &
+               average_distance > mean(average_distance) & 
+               average_sedentary < mean(average_sedentary) ~ "very active",
+             average_very_active_m < mean(average_very_active_m) &
+               average_distance < mean(average_distance) & 
+               average_sedentary > mean(average_sedentary) ~ "low active",
+             TRUE ~ "moderately active"))
+```
+
+```{r}
+ggplot(grouped_d_a,aes(x = "", Y = average_very_active_m)) +
+  geom_bar(aes(fill = activity_level)) +
+  coord_polar(theta = "y")
+```
+
+> AS we can more than 1 thirds of our sample are low active.
+
+
+
+Then adding the activity level column to our **daily_activity_sleep** 
+
+```{r}
+daily_activity_sleep <- grouped_d_a %>% 
+  select(id, activity_level) %>% 
+  left_join(daily_activity_sleep, grouped_d_a, by = "id")
+```
+
+
+now plotting total distance covered VS calories burnt by activity level
+```{r message=FALSE, warning=FALSE}
+ggplot(daily_activity_sleep, aes(x = total_distance, y = calories)) +
+  geom_point(aes(color = activity_level, shape = activity_level)) +
+  geom_smooth() +
+  labs(title = "total distance covered VS calories burnt by activity level")
+```
+
+> We can see a positive coorlation between the distance covered and the total calories burnt, and also that very active people tend to burn more calories with less distance covred.
+
+
+
+#### exploring if there is a coorelation between Sleep and calories or total steps respectively:
+
+```{r message=FALSE, warning=FALSE}
+ggplot(daily_activity_sleep, aes(x = total_minutes_asleep, y = calories)) +
+  geom_point(aes(color = activity_level, shape = activity_level)) +
+  geom_smooth() +
+  labs(title = "Total sleep minutes VS calories by activity level")
+
+ggplot(daily_activity_sleep, aes(x = total_minutes_asleep, y = total_steps)) +
+  geom_point(aes(color = activity_level, shape = activity_level)) +
+  geom_smooth() +
+  labs(title = "Total sleep minutes VS steps by activity level")
+```
+
+
+>we can see no correlation between sleep and steps or calories burnt
+
+
+
+
+### Act
+
+
+#### First we need to mention some of the limitations of our datasets:
+
+* limited number of participants 33 which is not enough to represent the whole population.
+
+* no demographic data, we don't know the gender of the participants, giving into consideration that BellaBeat is focusing on women products. it would be ideal to have a sample of women.
+
+* the data is 2 years old and only taken over 30 days.
+
+> giving all of the above, we should take the results of the analysis very carefully, and further analysis with internal data from BellaBeat will be very important to confirm this analysis.
+
+#### final recommendations:
+
+1- Our Marketing strategy for **Leaf** and **Time** should focus on the importance of activity (minutes or steps) for burning calories and loosing weight, and the benefits of wearing our smart devices to record activities and setting goals and get reminded every day to reach your goal.
+
+2- from our analysis we can recommend the following for better caloric burn: 
+
+  * more than 20 minutes per day of high intensity activity.
+  
+  * more than 5 kilometer of walking distance per day.
+  
+  * less than 16 hours sedentary per day.
+  
+3- introduce some kind of trophy system to our app for people who keep reaching the daily goal for long time, this will encourage our customers to wear our products for longer periods, because of the sens of achivement that the could get from the trophy system.
+
+
+ > Thank you for reading, your feedback is most welcomed
+ 
+ 
+ 
+
+
